@@ -1,2 +1,2 @@
 # Exogenesis
-A Spore-two like project to be made
+A Spore like project to be made
