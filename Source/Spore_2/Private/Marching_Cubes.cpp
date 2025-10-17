@@ -4,13 +4,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "DrawDebugHelpers.h"
 
-// NOTE: replace YOURPROJECT_API with your project's module API macro in the header above
-// (e.g., if your project is Spore_2, header's UCLASS() should be class SPORE_2_API ...)
 
-// ----- edgeTable and triTable (standard marching cubes tables) -----
-/* edgeTable and triTable definitions are long; both are required and standard.
-   Below I include the canonical tables used by marching cubes (edgeTable[256] and triTable[256][16]).
-   They are huge arrays but must be present for correctness. */
 
 const int AMarchingCubes::edgeTable[256] = {
 0x0,0x109,0x203,0x30a,0x406,0x50f,0x605,0x70c,0x80c,0x905,0xa0f,0xb06,0xc0a,0xd03,0xe09,0xf00,
@@ -54,12 +48,6 @@ const int AMarchingCubes::triTable[256][16] = {
 // ... (the full 256 rows must appear here) ...
 };
 
-// NOTE: for brevity in this message the triTable has been truncated —
-// in your source file you must include the full 256x16 triTable values.
-// Use a standard marching-cubes triTable (many references available online).
-
-// ---------------------------------------------------------------------
-
 AMarchingCubes::AMarchingCubes()
 {
     PrimaryActorTick.bCanEverTick = false;
@@ -92,11 +80,9 @@ void AMarchingCubes::RebuildMesh()
 
 void AMarchingCubes::BuildDensityField()
 {
-    // origin at actor location - center the grid around actor for convenience
     const FVector ActorOrigin = GetActorLocation();
     const FVector GridOrigin = ActorOrigin - FVector(GridSizeX - 1, GridSizeY - 1, GridSizeZ - 1) * 0.5f * CellSize;
 
-    // collect centers and radii from InfluenceActors
     TArray<FVector> Centers;
     TArray<float> Radii;
     if (InfluenceActors.Num() > 0)
@@ -112,7 +98,6 @@ void AMarchingCubes::BuildDensityField()
     }
     else
     {
-        // default: one central metaball and two offset ones so you see blending
         Centers.Add(ActorOrigin + FVector(-MetaballRadius * 0.8f, 0, 0));
         Radii.Add(MetaballRadius);
         Centers.Add(ActorOrigin + FVector(MetaballRadius * 0.8f, 0, 0));
@@ -130,7 +115,6 @@ void AMarchingCubes::BuildDensityField()
                 int idx = DensityIndex(x, y, z);
                 FVector WorldPos = GridOrigin + FVector(x * CellSize, y * CellSize, z * CellSize);
 
-                // sum contributions from metaballs: density = max(0, r - dist)
                 float density = -FLT_MAX;
                 float sum = 0.0f;
                 for (int i = 0; i < Centers.Num(); ++i)
@@ -140,7 +124,6 @@ void AMarchingCubes::BuildDensityField()
                     sum += contrib;
                 }
 
-                // We will use sum as density; iso-level threshold of 0 means inside combined spheres
                 DensityField[idx] = sum;
             }
         }
@@ -171,14 +154,12 @@ void AMarchingCubes::Polygonize()
     const FVector ActorOrigin = GetActorLocation();
     const FVector GridOrigin = ActorOrigin - FVector(GridSizeX - 1, GridSizeY - 1, GridSizeZ - 1) * 0.5f * CellSize;
 
-    // iterate over each cube in the grid
     for (int z = 0; z < GridSizeZ - 1; ++z)
     {
         for (int y = 0; y < GridSizeY - 1; ++y)
         {
             for (int x = 0; x < GridSizeX - 1; ++x)
             {
-                // corner positions and their densities
                 FVector p[8];
                 float val[8];
 
@@ -191,7 +172,6 @@ void AMarchingCubes::Polygonize()
                     val[i] = DensityField[DensityIndex(ix, iy, iz)];
                 }
 
-                // compute cubeindex
                 int cubeindex = 0;
                 for (int i = 0; i < 8; ++i)
                 {
@@ -201,7 +181,6 @@ void AMarchingCubes::Polygonize()
                 int edges = edgeTable[cubeindex];
                 if (edges == 0) continue; // no triangles
 
-                // find the vertices where the surface intersects the cube
                 FVector vertlist[12];
                 if (edges & 1) vertlist[0] = VertexInterp(IsoLevel, p[0], p[1], val[0], val[1]);
                 if (edges & 2) vertlist[1] = VertexInterp(IsoLevel, p[1], p[2], val[1], val[2]);
@@ -232,7 +211,6 @@ void AMarchingCubes::Polygonize()
         }
     }
 
-    // compute normals
     Normals.Init(FVector::ZeroVector, Vertices.Num());
     for (int i = 0; i < Triangles.Num(); i += 3)
     {
@@ -249,18 +227,16 @@ void AMarchingCubes::Polygonize()
     }
     for (int i = 0; i < Normals.Num(); ++i) Normals[i].Normalize();
 
-    // UVs (simple planar mapping)
     UVs.SetNum(Vertices.Num());
     for (int i = 0; i < Vertices.Num(); ++i)
     {
         UVs[i] = FVector2D(Vertices[i].X * 0.01f, Vertices[i].Y * 0.01f);
     }
 
-    // Colors and tangents
+    // Colors 
     Colors.Init(FLinearColor::White, Vertices.Num());
     Tangents.Init(FProcMeshTangent(1, 0, 0), Vertices.Num());
 
-    // create mesh section
     ProcMesh->ClearAllMeshSections();
     ProcMesh->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UVs, Colors, Tangents, true);
     ProcMesh->ContainsPhysicsTriMeshData(true);
